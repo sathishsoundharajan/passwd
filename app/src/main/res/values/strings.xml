@@ -1,0 +1,52 @@
+<resources>
+    <string name="app_name">Passwd</string>
+    <string name="app_full_name">Passwd - Secure Password Manager</string>
+    <string name="app_description">Keep your passwords safe with military-grade encryption</string>
+    <string name="app_tagline">Your passwords, securely stored</string>
+
+    <!-- Authentication -->
+    <string name="welcome_back">Welcome Back</string>
+    <string name="enter_master_password">Enter your master password</string>
+    <string name="set_master_password">Set your master password</string>
+    <string name="confirm_master_password">Confirm your master password</string>
+    <string name="biometric_prompt_title">Unlock Passwd</string>
+    <string name="biometric_prompt_subtitle">Use your fingerprint to unlock</string>
+    <string name="biometric_prompt_description">Place your finger on the sensor</string>
+
+    <!-- Password Management -->
+    <string name="password_manager">Passwd</string>
+    <string name="add_password">Add Password</string>
+    <string name="edit_password">Edit Password</string>
+    <string name="delete_password">Delete Password</string>
+    <string name="search_passwords">Search passwords...</string>
+    <string name="no_passwords_yet">No passwords yet</string>
+    <string name="add_first_password">Add your first password to get started with secure password management</string>
+
+    <!-- Fields -->
+    <string name="service">Service</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="notes">Notes</string>
+    <string name="generate_password">Generate Password</string>
+
+    <!-- Actions -->
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="copy">Copy</string>
+    <string name="copied">Copied</string>
+    <string name="username_copied">Username copied</string>
+    <string name="password_copied">Password copied</string>
+
+    <!-- Security -->
+    <string name="security_features">Security Features</string>
+    <string name="military_grade_encryption">Military-grade encryption</string>
+    <string name="biometric_authentication">Biometric authentication</string>
+    <string name="offline_storage">Offline storage</string>
+    <string name="no_internet_required">No internet connection required</string>
+
+    <!-- About -->
+    <string name="about">About</string>
+    <string name="version">Version</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="terms_of_service">Terms of Service</string>
+</resources>

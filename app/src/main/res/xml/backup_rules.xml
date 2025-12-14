@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Password data should not be backed up -->
+    <exclude domain="database" path="passwords.db" />
+    <exclude domain="sharedpref" path="auth_prefs.xml" />
+</full-backup-content>

@@ -1,0 +1,42 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="60dp"
+    android:viewportWidth="200"
+    android:viewportHeight="60">
+  <!-- Lock icon -->
+  <path
+      android:pathData="M20,25m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0"
+      android:fillColor="#0052CC"/>
+  <path
+      android:pathData="M20,25m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0"
+      android:fillColor="#FFFFFF"/>
+  <path
+      android:pathData="M16,21h8v6h-3v-3h-2v3h-3z"
+      android:fillColor="#0052CC"/>
+  <rect
+      android:pathData="M17,18h2v2h-2z"
+      android:fillColor="#0052CC"/>
+  <rect
+      android:pathData="M21,18h2v2h-2z"
+      android:fillColor="#0052CC"/>
+
+  <!-- Text "Passwd" -->
+  <path
+      android:pathData="M45,35 L45,15 L50,15 L50,30 L55,30 L55,35 Z"
+      android:fillColor="#0052CC"/>
+  <path
+      android:pathData="M60,35 L60,15 L65,15 L65,25 L75,25 L75,15 L80,15 L80,35 L75,35 L75,30 L65,30 L65,35 Z"
+      android:fillColor="#0052CC"/>
+  <path
+      android:pathData="M85,35 L85,15 L90,15 L90,30 L100,30 L100,35 Z"
+      android:fillColor="#0052CC"/>
+  <path
+      android:pathData="M105,35 L105,15 L110,15 L110,25 L115,25 L115,35 L120,35 L120,30 L115,30 L115,20 L110,20 L110,35 Z"
+      android:fillColor="#0052CC"/>
+  <path
+      android:pathData="M125,35 L125,15 L130,15 L130,25 L140,25 L140,30 L145,30 L145,35 Z"
+      android:fillColor="#0052CC"/>
+  <path
+      android:pathData="M150,35 L150,15 L155,15 L155,30 L160,30 L160,35 Z"
+      android:fillColor="#0052CC"/>
+</vector>
