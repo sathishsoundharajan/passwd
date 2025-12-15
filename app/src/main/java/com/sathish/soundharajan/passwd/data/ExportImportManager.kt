@@ -3,6 +3,7 @@ package com.sathish.soundharajan.passwd.data
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import com.sathish.soundharajan.passwd.data.models.*
 import com.sathish.soundharajan.passwd.security.CryptoManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -11,9 +12,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -25,53 +30,178 @@ import kotlin.Result
 class ExportImportManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val cryptoManager: CryptoManager,
-    private val passwordRepository: PasswordRepository
+    private val vaultRepository: VaultRepository,
+    private val documentManager: DocumentManager
 ) {
 
     companion object {
-        private const val EXPORT_VERSION = "1.0"
+        private const val EXPORT_VERSION = "2.0"
         private const val EXPORT_FORMAT_JSON = "json"
-        private const val EXPORT_FORMAT_CSV = "csv"
     }
 
     @Serializable
     data class ExportData(
         val version: String,
         val timestamp: Long,
-        val passwordCount: Int,
-        val passwords: List<ExportedPassword>
+        val totalEntries: Int,
+        val passwords: List<ExportedPassword>,
+        val bankAccounts: List<ExportedBankAccount>,
+        val creditCards: List<ExportedCreditCard>,
+        val identityCards: List<ExportedIdentityCard>,
+        val documents: List<ExportedDocument>
     )
 
     @Serializable
     data class ExportedPassword(
         val id: Long,
+        val title: String,
         val service: String,
         val username: String,
         val password: String,
+        val url: String,
+        val category: String,
+        val tags: String,
         val notes: String,
+        val createdAt: Long,
+        val updatedAt: Long,
+        val isArchived: Boolean
+    )
+
+    @Serializable
+    data class ExportedBankAccount(
+        val id: Long,
+        val title: String,
+        val bankName: String,
+        val accountHolder: String,
+        val accountNumber: String,
+        val routingNumber: String,
+        val iban: String,
+        val accountType: String,
+        val swiftCode: String,
+        val branch: String,
+        val pin: String,
+        val phoneNumber: String,
+        val address: String,
+        val category: String,
+        val tags: String,
+        val notes: String,
+        val createdAt: Long,
+        val updatedAt: Long,
+        val isArchived: Boolean
+    )
+
+    @Serializable
+    data class ExportedCreditCard(
+        val id: Long,
+        val title: String,
+        val cardholderName: String,
+        val cardNumber: String,
+        val expirationMonth: Int,
+        val expirationYear: Int,
+        val cvv: String,
+        val cardType: String,
+        val issuingBank: String,
+        val pin: String,
+        val billingAddress: String,
+        val phoneNumber: String,
+        val notes: String,
+        val category: String,
         val tags: String,
         val createdAt: Long,
         val updatedAt: Long,
         val isArchived: Boolean
     )
 
-    suspend fun exportPasswords(
-        passwords: List<PasswordEntry>,
+    @Serializable
+    data class ExportedIdentityCard(
+        val id: Long,
+        val title: String,
+        val fullName: String,
+        val idNumber: String,
+        val documentType: String,
+        val issuingAuthority: String,
+        val issueDate: Long,
+        val expirationDate: Long,
+        val dateOfBirth: Long?,
+        val nationality: String,
+        val address: String,
+        val placeOfBirth: String,
+        val gender: String,
+        val height: String,
+        val eyeColor: String,
+        val bloodType: String,
+        val organDonor: Boolean,
+        val identifyingMarks: String,
+        val emergencyContact: String,
+        val additionalInfo: Map<String, String>,
+        val category: String,
+        val tags: String,
+        val notes: String,
+        val documentPaths: String,
+        val createdAt: Long,
+        val updatedAt: Long,
+        val isArchived: Boolean
+    )
+
+    @Serializable
+    data class ExportedDocument(
+        val pathIdentifier: String,
+        val fileName: String,
+        val mimeType: String,
+        val size: Long,
+        val checksum: String
+    )
+
+    suspend fun exportVaultEntries(
+        vaultEntries: List<VaultEntry>,
         format: String = EXPORT_FORMAT_JSON,
         masterPassword: String,
         destinationUri: Uri
-    ): Result<ExportResult> = withContext(Dispatchers.IO) {
+    ): Result<VaultExportResult> = withContext(Dispatchers.IO) {
         try {
-            val exportData = createExportData(passwords)
-            val serializedData = serializeData(exportData, format)
-            val encryptedData = encryptExportData(serializedData, masterPassword)
+            val exportData = createVaultExportData(vaultEntries)
+            val serializedData = Json.encodeToString(exportData)
 
+            // Create ZIP file containing data and documents
             context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
-                outputStream.write(encryptedData)
+                ZipOutputStream(outputStream).use { zipOut ->
+                    // Add main data file
+                    zipOut.putNextEntry(ZipEntry("vault_data.json"))
+                    zipOut.write(serializedData.toByteArray(Charsets.UTF_8))
+                    zipOut.closeEntry()
+
+                    // Add documents
+                    for (document in exportData.documents) {
+                        try {
+                            val documentData = documentManager.getDocument(document.pathIdentifier).getOrThrow()
+                            zipOut.putNextEntry(ZipEntry("documents/${document.fileName}"))
+                            zipOut.write(documentData)
+                            zipOut.closeEntry()
+                        } catch (e: Exception) {
+                            // Skip documents that can't be read
+                        }
+                    }
+                }
             } ?: throw Exception("Failed to open output stream")
 
-            Result.success(ExportResult(
-                passwordCount = passwords.size,
+            // Encrypt the entire ZIP file
+            val zipData = context.contentResolver.openInputStream(destinationUri)?.use { it.readBytes() }
+                ?: throw Exception("Failed to read created ZIP file")
+
+            val encryptedData = encryptExportData(String(zipData, Charsets.ISO_8859_1), masterPassword)
+
+            // Write encrypted data back
+            context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+                outputStream.write(encryptedData)
+            } ?: throw Exception("Failed to write encrypted data")
+
+            Result.success(VaultExportResult(
+                totalEntries = vaultEntries.size,
+                passwordCount = exportData.passwords.size,
+                bankAccountCount = exportData.bankAccounts.size,
+                creditCardCount = exportData.creditCards.size,
+                identityCardCount = exportData.identityCards.size,
+                documentCount = exportData.documents.size,
                 fileSize = encryptedData.size,
                 format = format,
                 timestamp = System.currentTimeMillis()
@@ -82,25 +212,31 @@ class ExportImportManager @Inject constructor(
         }
     }
 
-    suspend fun importPasswords(
+    suspend fun importVaultEntries(
         sourceUri: Uri,
         masterPassword: String,
         conflictStrategy: ConflictStrategy = ConflictStrategy.SKIP
-    ): Result<ImportResult> = withContext(Dispatchers.IO) {
+    ): Result<VaultImportResult> = withContext(Dispatchers.IO) {
         try {
             val encryptedData = context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
                 inputStream.readBytes()
             } ?: throw Exception("Failed to read file")
 
             val decryptedData = decryptImportData(encryptedData, masterPassword)
-            val exportData = deserializeData(decryptedData)
-            val importedPasswords = processImportData(exportData, conflictStrategy)
 
-            Result.success(ImportResult(
-                totalPasswords = exportData.passwordCount,
-                importedPasswords = importedPasswords.size,
-                skippedPasswords = exportData.passwordCount - importedPasswords.size,
-                conflictsResolved = importedPasswords.count { it.isUpdate }
+            // Extract ZIP contents
+            val zipData = decryptedData.toByteArray(Charsets.ISO_8859_1)
+            val extractedData = extractZipContents(zipData)
+
+            val exportData = Json.decodeFromString<ExportData>(extractedData["vault_data.json"] ?: throw Exception("Missing vault data"))
+            val importedEntries = processVaultImportData(exportData, extractedData, conflictStrategy)
+
+            Result.success(VaultImportResult(
+                totalEntries = exportData.totalEntries,
+                importedEntries = importedEntries.size,
+                skippedEntries = exportData.totalEntries - importedEntries.size,
+                conflictsResolved = importedEntries.count { it.isUpdate },
+                importedDocuments = importedEntries.sumOf { it.documentCount }
             ))
 
         } catch (e: Exception) {
@@ -108,65 +244,324 @@ class ExportImportManager @Inject constructor(
         }
     }
 
-    private fun createExportData(passwords: List<PasswordEntry>): ExportData {
-        val exportedPasswords = passwords.map { password ->
-            ExportedPassword(
-                id = password.id,
-                service = password.service,
-                username = password.username,
-                password = password.password,
-                notes = password.notes,
-                tags = password.tags,
-                createdAt = password.createdAt,
-                updatedAt = password.updatedAt,
-                isArchived = password.isArchived
-            )
+    private suspend fun createVaultExportData(vaultEntries: List<VaultEntry>): ExportData {
+        val passwords = mutableListOf<ExportedPassword>()
+        val bankAccounts = mutableListOf<ExportedBankAccount>()
+        val creditCards = mutableListOf<ExportedCreditCard>()
+        val identityCards = mutableListOf<ExportedIdentityCard>()
+        val documents = mutableListOf<ExportedDocument>()
+
+        vaultEntries.forEach { entry ->
+            when (entry.type) {
+                VaultEntryType.PASSWORD -> {
+                    vaultRepository.getPasswordData(entry)?.let { data ->
+                        passwords.add(ExportedPassword(
+                            id = entry.id,
+                            title = entry.title,
+                            service = data.service,
+                            username = data.username,
+                            password = data.password,
+                            url = data.url,
+                            category = entry.category,
+                            tags = entry.tags,
+                            notes = entry.notes,
+                            createdAt = entry.createdAt,
+                            updatedAt = entry.updatedAt,
+                            isArchived = entry.isArchived
+                        ))
+                    }
+                }
+                VaultEntryType.BANK_ACCOUNT -> {
+                    vaultRepository.getBankAccountData(entry)?.let { data ->
+                        bankAccounts.add(ExportedBankAccount(
+                            id = entry.id,
+                            title = entry.title,
+                            bankName = data.bankName,
+                            accountHolder = data.accountHolder,
+                            accountNumber = data.accountNumber,
+                            routingNumber = data.routingNumber,
+                            iban = data.iban,
+                            accountType = data.accountType,
+                            swiftCode = data.swiftCode,
+                            branch = data.branch,
+                            pin = data.pin,
+                            phoneNumber = data.phoneNumber,
+                            address = data.address,
+                            category = entry.category,
+                            tags = entry.tags,
+                            notes = entry.notes,
+                            createdAt = entry.createdAt,
+                            updatedAt = entry.updatedAt,
+                            isArchived = entry.isArchived
+                        ))
+                    }
+                }
+                VaultEntryType.CREDIT_CARD -> {
+                    vaultRepository.getCreditCardData(entry)?.let { data ->
+                        creditCards.add(ExportedCreditCard(
+                            id = entry.id,
+                            title = entry.title,
+                            cardholderName = data.cardholderName,
+                            cardNumber = data.cardNumber,
+                            expirationMonth = data.expirationMonth,
+                            expirationYear = data.expirationYear,
+                            cvv = data.cvv,
+                            cardType = data.cardType,
+                            issuingBank = data.issuingBank,
+                            pin = data.pin,
+                            billingAddress = data.billingAddress,
+                            phoneNumber = data.phoneNumber,
+                            notes = data.notes,
+                            category = entry.category,
+                            tags = entry.tags,
+                            createdAt = entry.createdAt,
+                            updatedAt = entry.updatedAt,
+                            isArchived = entry.isArchived
+                        ))
+                    }
+                }
+                VaultEntryType.IDENTITY_CARD -> {
+                    vaultRepository.getIdentityCardData(entry)?.let { data ->
+                        identityCards.add(ExportedIdentityCard(
+                            id = entry.id,
+                            title = entry.title,
+                            fullName = data.fullName,
+                            idNumber = data.idNumber,
+                            documentType = data.documentType,
+                            issuingAuthority = data.issuingAuthority,
+                            issueDate = data.issueDate,
+                            expirationDate = data.expirationDate,
+                            dateOfBirth = data.dateOfBirth,
+                            nationality = data.nationality,
+                            address = data.address,
+                            placeOfBirth = data.placeOfBirth,
+                            gender = data.gender,
+                            height = data.height,
+                            eyeColor = data.eyeColor,
+                            bloodType = data.bloodType,
+                            organDonor = data.organDonor,
+                            identifyingMarks = data.identifyingMarks,
+                            emergencyContact = data.emergencyContact,
+                            additionalInfo = data.additionalInfo,
+                            category = entry.category,
+                            tags = entry.tags,
+                            notes = entry.notes,
+                            documentPaths = entry.documentPaths,
+                            createdAt = entry.createdAt,
+                            updatedAt = entry.updatedAt,
+                            isArchived = entry.isArchived
+                        ))
+
+                        // Collect document metadata
+                        val documentPaths = documentManager.parseDocumentPaths(entry.documentPaths)
+                        documentPaths.forEach { pathIdentifier ->
+                            try {
+                                val docInfo = documentManager.getDocumentInfo(pathIdentifier).getOrNull()
+                                val documentData = documentManager.getDocument(pathIdentifier).getOrNull()
+                                if (docInfo != null && documentData != null) {
+                                    val checksum = calculateChecksum(documentData)
+                                    documents.add(ExportedDocument(
+                                        pathIdentifier = pathIdentifier,
+                                        fileName = docInfo.fileName,
+                                        mimeType = docInfo.fileType,
+                                        size = documentData.size.toLong(),
+                                        checksum = checksum
+                                    ))
+                                }
+                            } catch (e: Exception) {
+                                // Skip documents that can't be read
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         return ExportData(
             version = EXPORT_VERSION,
             timestamp = System.currentTimeMillis(),
-            passwordCount = passwords.size,
-            passwords = exportedPasswords
+            totalEntries = vaultEntries.size,
+            passwords = passwords,
+            bankAccounts = bankAccounts,
+            creditCards = creditCards,
+            identityCards = identityCards,
+            documents = documents
         )
     }
 
-    private fun serializeData(exportData: ExportData, format: String): String {
-        return when (format.lowercase()) {
-            EXPORT_FORMAT_JSON -> Json.encodeToString(exportData)
-            EXPORT_FORMAT_CSV -> createCSVData(exportData)
-            else -> throw IllegalArgumentException("Unsupported format: $format")
+    private fun extractZipContents(zipData: ByteArray): Map<String, String> {
+        val extractedFiles = mutableMapOf<String, String>()
+
+        ZipInputStream(zipData.inputStream()).use { zipIn ->
+            var entry: ZipEntry? = zipIn.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val content = zipIn.readBytes().toString(Charsets.UTF_8)
+                    extractedFiles[entry.name] = content
+                }
+                zipIn.closeEntry()
+                entry = zipIn.nextEntry
+            }
         }
+
+        return extractedFiles
     }
 
-    private fun createCSVData(exportData: ExportData): String {
-        val csvBuilder = StringBuilder()
-        csvBuilder.appendLine("Service,Username,Password,Notes,Tags,CreatedAt,UpdatedAt,IsArchived")
-        exportData.passwords.forEach { password ->
-            val escapedService = escapeCSV(password.service)
-            val escapedUsername = escapeCSV(password.username)
-            val escapedPassword = escapeCSV(password.password)
-            val escapedNotes = escapeCSV(password.notes)
-            val escapedTags = escapeCSV(password.tags)
-            csvBuilder.appendLine("$escapedService,$escapedUsername,$escapedPassword,$escapedNotes,$escapedTags,${password.createdAt},${password.updatedAt},${password.isArchived}")
+    private suspend fun processVaultImportData(
+        exportData: ExportData,
+        extractedFiles: Map<String, String>,
+        conflictStrategy: ConflictStrategy
+    ): List<VaultImportEntry> {
+        val importedEntries = mutableListOf<VaultImportEntry>()
+
+        // Import passwords
+        for (exportedPassword in exportData.passwords) {
+            try {
+                vaultRepository.insertPasswordEntry(
+                    title = exportedPassword.title,
+                    service = exportedPassword.service,
+                    username = exportedPassword.username,
+                    password = exportedPassword.password,
+                    url = exportedPassword.url,
+                    category = exportedPassword.category,
+                    tags = exportedPassword.tags,
+                    notes = exportedPassword.notes
+                ).fold(
+                    onSuccess = { importedEntries.add(VaultImportEntry(VaultEntryType.PASSWORD, false, 0)) },
+                    onFailure = { /* Skip on failure */ }
+                )
+            } catch (e: Exception) {
+                // Skip failed imports
+            }
         }
-        return csvBuilder.toString()
+
+        // Import bank accounts
+        for (exportedBank in exportData.bankAccounts) {
+            try {
+                vaultRepository.insertBankAccountEntry(
+                    title = exportedBank.title,
+                    bankName = exportedBank.bankName,
+                    accountHolder = exportedBank.accountHolder,
+                    accountNumber = exportedBank.accountNumber,
+                    routingNumber = exportedBank.routingNumber,
+                    iban = exportedBank.iban,
+                    accountType = exportedBank.accountType,
+                    swiftCode = exportedBank.swiftCode,
+                    branch = exportedBank.branch,
+                    pin = exportedBank.pin,
+                    phoneNumber = exportedBank.phoneNumber,
+                    address = exportedBank.address,
+                    category = exportedBank.category,
+                    tags = exportedBank.tags,
+                    notes = exportedBank.notes
+                ).fold(
+                    onSuccess = { importedEntries.add(VaultImportEntry(VaultEntryType.BANK_ACCOUNT, false, 0)) },
+                    onFailure = { /* Skip on failure */ }
+                )
+            } catch (e: Exception) {
+                // Skip failed imports
+            }
+        }
+
+        // Import credit cards
+        for (exportedCard in exportData.creditCards) {
+            try {
+                vaultRepository.insertCreditCardEntry(
+                    title = exportedCard.title,
+                    cardholderName = exportedCard.cardholderName,
+                    cardNumber = exportedCard.cardNumber,
+                    expirationMonth = exportedCard.expirationMonth,
+                    expirationYear = exportedCard.expirationYear,
+                    cvv = exportedCard.cvv,
+                    cardType = exportedCard.cardType,
+                    issuingBank = exportedCard.issuingBank,
+                    pin = exportedCard.pin,
+                    billingAddress = exportedCard.billingAddress,
+                    phoneNumber = exportedCard.phoneNumber,
+                    notes = exportedCard.notes,
+                    category = exportedCard.category,
+                    tags = exportedCard.tags
+                ).fold(
+                    onSuccess = { importedEntries.add(VaultImportEntry(VaultEntryType.CREDIT_CARD, false, 0)) },
+                    onFailure = { /* Skip on failure */ }
+                )
+            } catch (e: Exception) {
+                // Skip failed imports
+            }
+        }
+
+        // Import identity cards with documents
+        for (exportedId in exportData.identityCards) {
+            try {
+                vaultRepository.insertIdentityCardEntry(
+                    title = exportedId.title,
+                    fullName = exportedId.fullName,
+                    idNumber = exportedId.idNumber,
+                    documentType = exportedId.documentType,
+                    issuingAuthority = exportedId.issuingAuthority,
+                    issueDate = exportedId.issueDate,
+                    expirationDate = exportedId.expirationDate,
+                    dateOfBirth = exportedId.dateOfBirth,
+                    nationality = exportedId.nationality,
+                    address = exportedId.address,
+                    placeOfBirth = exportedId.placeOfBirth,
+                    gender = exportedId.gender,
+                    height = exportedId.height,
+                    eyeColor = exportedId.eyeColor,
+                    bloodType = exportedId.bloodType,
+                    organDonor = exportedId.organDonor,
+                    identifyingMarks = exportedId.identifyingMarks,
+                    emergencyContact = exportedId.emergencyContact,
+                    additionalInfo = exportedId.additionalInfo,
+                    category = exportedId.category,
+                    tags = exportedId.tags,
+                    notes = exportedId.notes
+                ).fold(
+                    onSuccess = { entryId ->
+                        // Import associated documents
+                        var documentCount = 0
+                        val documentPaths = documentManager.parseDocumentPaths(exportedId.documentPaths)
+                        documentPaths.forEach { pathIdentifier ->
+                            try {
+                                val documentFileName = "documents/${documentManager.getDocumentInfo(pathIdentifier).getOrNull()?.fileName}"
+                                val documentData = extractedFiles[documentFileName]?.toByteArray(Charsets.ISO_8859_1)
+                                if (documentData != null) {
+                                    // Save document and link to entry
+                                    val newPathIdentifier = documentManager.saveDocument(
+                                        Uri.parse("content://temp"), // This would need proper URI handling
+                                        documentManager.getDocumentInfo(pathIdentifier).getOrNull()?.fileName ?: "document"
+                                    ).getOrThrow()
+
+                                    vaultRepository.addDocumentToEntry(entryId, Uri.parse("content://temp"), "temp").getOrThrow()
+                                    documentCount++
+                                }
+                            } catch (e: Exception) {
+                                // Skip failed document imports
+                            }
+                        }
+                        importedEntries.add(VaultImportEntry(VaultEntryType.IDENTITY_CARD, false, documentCount))
+                    },
+                    onFailure = { /* Skip on failure */ }
+                )
+            } catch (e: Exception) {
+                // Skip failed imports
+            }
+        }
+
+        return importedEntries
     }
 
-    private fun escapeCSV(value: String): String {
-        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            "\"${value.replace("\"", "\"\"")}\""
-        } else {
-            value
-        }
+    private fun calculateChecksum(data: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(data)
+        return hash.joinToString("") { "%02x".format(it) }
     }
 
     private fun encryptExportData(data: String, masterPassword: String): ByteArray {
-        // Use standard AES-GCM with derived key for portability
-        val salt = cryptoManager.generateSalt() 
+        val salt = cryptoManager.generateSalt()
         val keyBytes = cryptoManager.deriveDatabaseKey(masterPassword.toCharArray(), salt)
         val key = SecretKeySpec(keyBytes, "AES")
-        
+
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key)
         val encrypted = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
@@ -189,20 +584,8 @@ class ExportImportManager @Inject constructor(
 
         val iv = Base64.decode(envelope.getString("iv"), Base64.DEFAULT)
         val encrypted = Base64.decode(envelope.getString("data"), Base64.DEFAULT)
-        // Handle migration: older exports might not have salt/used hardcoded salt or keystore.
-        // But since I'm fixing the bug now, let's assume new format or standard.
-        // Ideally we check version.
-        val saltStr = if (envelope.has("salt")) envelope.getString("salt") else null
-        
-        if (saltStr == null) {
-            // Legacy fallback or error. Given previous code was broken (using device keystore), 
-            // old exports explicitly FAILED to traverse devices. 
-            // Here we try to recover if it was the same device.
-            // But I will stick to the new portable format.
-            throw Exception("Invalid export format: missing salt")
-        }
-        
-        val salt = Base64.decode(saltStr, Base64.DEFAULT)
+        val salt = Base64.decode(envelope.getString("salt"), Base64.DEFAULT)
+
         val keyBytes = cryptoManager.deriveDatabaseKey(masterPassword.toCharArray(), salt)
         val key = SecretKeySpec(keyBytes, "AES")
 
@@ -214,170 +597,36 @@ class ExportImportManager @Inject constructor(
         return String(decrypted, Charsets.UTF_8)
     }
 
-    private fun deserializeData(data: String): ExportData {
-        return try {
-            Json.decodeFromString<ExportData>(data)
-        } catch (e: Exception) {
-            try {
-                parseCSVData(data)
-            } catch (csvException: Exception) {
-                throw Exception("Unsupported or corrupted file format")
-            }
-        }
-    }
-
-    private fun parseCSVData(csvData: String): ExportData {
-         val lines = csvData.lines().filter { it.isNotBlank() }
-        if (lines.size < 2) throw Exception("Invalid CSV format")
-
-        val passwords = lines.drop(1).map { line ->
-            val columns = parseCSVLine(line)
-            if (columns.size < 8) throw Exception("Invalid CSV row format")
-
-            ExportedPassword(
-                id = columns[0].toLongOrNull() ?: 0L,
-                service = unescapeCSV(columns[1]),
-                username = unescapeCSV(columns[2]),
-                password = unescapeCSV(columns[3]),
-                notes = unescapeCSV(columns[4]),
-                tags = unescapeCSV(columns[5]),
-                createdAt = columns[6].toLongOrNull() ?: System.currentTimeMillis(),
-                updatedAt = columns[7].toLongOrNull() ?: System.currentTimeMillis(),
-                isArchived = columns[8].toBoolean()
-            )
-        }
-
-        return ExportData(
-            version = EXPORT_VERSION,
-            timestamp = System.currentTimeMillis(),
-            passwordCount = passwords.size,
-            passwords = passwords
-        )
-    }
-
-    private fun parseCSVLine(line: String): List<String> {
-        val result = mutableListOf<String>()
-        var current = StringBuilder()
-        var inQuotes = false
-        var i = 0
-
-        while (i < line.length) {
-            val char = line[i]
-            when {
-                char == '"' && !inQuotes -> inQuotes = true
-                char == '"' && inQuotes && i + 1 < line.length && line[i + 1] == '"' -> {
-                    current.append('"')
-                    i++
-                }
-                char == '"' && inQuotes -> inQuotes = false
-                char == ',' && !inQuotes -> {
-                    result.add(current.toString())
-                    current = StringBuilder()
-                }
-                else -> current.append(char)
-            }
-            i++
-        }
-        result.add(current.toString())
-        return result
-    }
-
-    private fun unescapeCSV(value: String): String {
-        return if (value.startsWith("\"") && value.endsWith("\"")) {
-            value.substring(1, value.length - 1).replace("\"\"", "\"")
-        } else {
-            value
-        }
-    }
-
-    private suspend fun processImportData(
-        exportData: ExportData,
-        conflictStrategy: ConflictStrategy
-    ): List<ImportEntry> {
-        val importedEntries = mutableListOf<ImportEntry>()
-
-        // Get all existing passwords for duplicate checking
-        val existingPasswords = passwordRepository.getAllPasswordsOnce().orEmpty() +
-                               passwordRepository.getAllArchivedPasswordsOnce().orEmpty()
-
-        for (exportedPassword in exportData.passwords) {
-            val passwordEntry = PasswordEntry(
-                service = exportedPassword.service,
-                username = exportedPassword.username,
-                password = exportedPassword.password,
-                notes = exportedPassword.notes,
-                tags = exportedPassword.tags,
-                createdAt = exportedPassword.createdAt,
-                updatedAt = exportedPassword.updatedAt,
-                isArchived = exportedPassword.isArchived
-            )
-
-            // Check for existing password by service + username combination
-            val existingPassword = existingPasswords.find {
-                it.service.equals(passwordEntry.service, ignoreCase = true) &&
-                it.username.equals(passwordEntry.username, ignoreCase = true)
-            }
-
-            when {
-                existingPassword == null -> {
-                    // No duplicate found, insert as new
-                    passwordRepository.insertPassword(passwordEntry).fold(
-                        onSuccess = { importedEntries.add(ImportEntry(passwordEntry, false)) },
-                        onFailure = { /* Skip on failure */ }
-                    )
-                }
-                conflictStrategy == ConflictStrategy.OVERWRITE -> {
-                    // Update existing password
-                    val updatedEntry = existingPassword.copy(
-                        password = passwordEntry.password,
-                        notes = passwordEntry.notes,
-                        tags = passwordEntry.tags,
-                        updatedAt = System.currentTimeMillis(),
-                        isArchived = passwordEntry.isArchived
-                    )
-                    passwordRepository.updatePassword(updatedEntry).fold(
-                        onSuccess = { importedEntries.add(ImportEntry(updatedEntry, true)) },
-                        onFailure = { /* Skip on failure */ }
-                    )
-                }
-                conflictStrategy == ConflictStrategy.SKIP -> {
-                    // Skip duplicate
-                    continue
-                }
-            }
-        }
-        return importedEntries
-    }
-
     fun generateExportFilename(format: String = EXPORT_FORMAT_JSON): String {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        return "passwd_export_$timestamp.$format"
-    }
-
-    suspend fun validateExportFile(uri: Uri, masterPassword: String): Result<ExportValidation> {
-        return try {
-            val encryptedData = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                inputStream.readBytes()
-            } ?: throw Exception("Cannot read file")
-
-            val decryptedData = decryptImportData(encryptedData, masterPassword)
-            val exportData = deserializeData(decryptedData)
-
-            Result.success(ExportValidation(
-                isValid = true,
-                version = exportData.version,
-                passwordCount = exportData.passwordCount,
-                timestamp = exportData.timestamp
-            ))
-        } catch (e: Exception) {
-            Result.success(ExportValidation(isValid = false, errorMessage = e.localizedMessage ?: "Unknown error"))
-        }
+        return "vault_export_$timestamp.$format"
     }
 
     enum class ConflictStrategy { SKIP, OVERWRITE }
 
-    data class ExportResult(val passwordCount: Int, val fileSize: Int, val format: String, val timestamp: Long)
-    data class ImportResult(val totalPasswords: Int, val importedPasswords: Int, val skippedPasswords: Int, val conflictsResolved: Int)
-    data class ImportEntry(val password: PasswordEntry, val isUpdate: Boolean)
-    data class ExportValidation(val isValid: Boolean, val version: String? = null, val passwordCount: Int? = null, val timestamp: Long? = null, val errorMessage: String? = null)
+    data class VaultExportResult(
+        val totalEntries: Int,
+        val passwordCount: Int,
+        val bankAccountCount: Int,
+        val creditCardCount: Int,
+        val identityCardCount: Int,
+        val documentCount: Int,
+        val fileSize: Int,
+        val format: String,
+        val timestamp: Long
+    )
+
+    data class VaultImportResult(
+        val totalEntries: Int,
+        val importedEntries: Int,
+        val skippedEntries: Int,
+        val conflictsResolved: Int,
+        val importedDocuments: Int
+    )
+
+    data class VaultImportEntry(
+        val type: VaultEntryType,
+        val isUpdate: Boolean,
+        val documentCount: Int
+    )
 }

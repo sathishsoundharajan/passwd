@@ -23,14 +23,18 @@ import androidx.navigation.compose.rememberNavController
 import com.sathish.soundharajan.passwd.navigation.Screen
 import com.sathish.soundharajan.passwd.presentation.AuthViewModel
 import com.sathish.soundharajan.passwd.presentation.PasswordViewModel
+import com.sathish.soundharajan.passwd.presentation.VaultViewModel
 import com.sathish.soundharajan.passwd.security.AuthManager
 import com.sathish.soundharajan.passwd.ui.AddPasswordScreen
+import com.sathish.soundharajan.passwd.ui.AddVaultEntryScreen
 import com.sathish.soundharajan.passwd.ui.ArchiveScreen
 import com.sathish.soundharajan.passwd.ui.AuthScreen
 import com.sathish.soundharajan.passwd.ui.EditPasswordScreen
+import com.sathish.soundharajan.passwd.ui.EditVaultEntryScreen
 import com.sathish.soundharajan.passwd.ui.PasswordListScreen
 import com.sathish.soundharajan.passwd.ui.RecentlyDeletedScreen
 import com.sathish.soundharajan.passwd.ui.SettingsScreen
+import com.sathish.soundharajan.passwd.ui.VaultListScreen
 import com.sathish.soundharajan.passwd.ui.theme.PasswdTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -72,6 +76,7 @@ fun AppNavigation() {
     // We can instantiate here.
     val authViewModel: AuthViewModel = hiltViewModel()
     val passwordViewModel: PasswordViewModel = hiltViewModel()
+    val vaultViewModel: VaultViewModel = hiltViewModel()
 
     val errorMessage by passwordViewModel.error.collectAsState()
 
@@ -90,7 +95,8 @@ fun AppNavigation() {
                 onAuthenticated = {
                     // Initialize ViewModel data after authentication
                     passwordViewModel.initializeData()
-                    navController.navigate(Screen.PasswordList.route) {
+                    vaultViewModel.initializeData()
+                    navController.navigate(Screen.VaultList.route) {
                         popUpTo(Screen.Auth.route) { inclusive = true }
                     }
                 }
@@ -183,6 +189,50 @@ fun AppNavigation() {
                     viewModel = passwordViewModel,
                     onBack = { navController.popBackStack() },
                     errorMessage = errorMessage
+                )
+            }
+        }
+
+        composable(Screen.VaultList.route) {
+            VaultListScreen(
+                viewModel = vaultViewModel,
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate(Screen.Auth.route) {
+                        popUpTo(Screen.VaultList.route) { inclusive = true }
+                    }
+                },
+                onNavigateToArchive = {
+                    navController.navigate(Screen.Archive.route)
+                },
+                onNavigateToAddEntry = {
+                    navController.navigate(Screen.AddVaultEntry.route)
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.Settings.route)
+                },
+                onNavigateToEdit = { entry ->
+                    navController.navigate(Screen.EditVaultEntry.createRoute(entry.id))
+                }
+            )
+        }
+
+        composable(Screen.AddVaultEntry.route) {
+            AddVaultEntryScreen(
+                viewModel = vaultViewModel,
+                onBack = { navController.popBackStack() },
+                onEntryAdded = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.EditVaultEntry.route) { backStackEntry ->
+            val entryId = backStackEntry.arguments?.getString("entryId")?.toLongOrNull()
+            if (entryId != null) {
+                EditVaultEntryScreen(
+                    entryId = entryId,
+                    viewModel = vaultViewModel,
+                    onBack = { navController.popBackStack() },
+                    onEntryUpdated = { navController.popBackStack() }
                 )
             }
         }

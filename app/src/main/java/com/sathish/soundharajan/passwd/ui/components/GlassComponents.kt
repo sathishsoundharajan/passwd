@@ -115,7 +115,9 @@ fun GlassButton(
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
-            disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+            disabledContainerColor = Color.Gray.copy(alpha = 0.3f),
+            contentColor = Color.White, // Force white text for better contrast
+            disabledContentColor = Color.White.copy(alpha = 0.5f)
         ),
         contentPadding = PaddingValues(0.dp),
         shape = RoundedCornerShape(16.dp)
