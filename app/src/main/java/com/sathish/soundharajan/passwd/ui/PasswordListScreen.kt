@@ -32,6 +32,9 @@ import com.sathish.soundharajan.passwd.ui.theme.AccentCyan
 import com.sathish.soundharajan.passwd.ui.theme.ErrorRed
 import com.sathish.soundharajan.passwd.ui.theme.Primary500
 import com.sathish.soundharajan.passwd.ui.theme.PrimaryGradient
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -454,6 +457,21 @@ fun PasswordItemGlass(
                                 onClick = onDelete
                         )
                     }
+
+                    // Timestamp information
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Created: ${formatTimestamp(password.createdAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = "Modified: ${formatTimestamp(password.updatedAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }
@@ -475,4 +493,11 @@ fun ActionButton(
         Spacer(modifier = Modifier.height(4.dp))
         Text(text, style = MaterialTheme.typography.labelSmall, color = color)
     }
+}
+
+// Helper function to format timestamps
+fun formatTimestamp(timestamp: Long): String {
+    val date = Date(timestamp)
+    val format = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    return format.format(date)
 }

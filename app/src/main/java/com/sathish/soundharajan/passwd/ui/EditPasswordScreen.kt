@@ -3,6 +3,7 @@ package com.sathish.soundharajan.passwd.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.sathish.soundharajan.passwd.data.PasswordEntry
 import com.sathish.soundharajan.passwd.presentation.PasswordViewModel
+import com.sathish.soundharajan.passwd.security.PasswordGenerator
 import com.sathish.soundharajan.passwd.ui.components.GlassButton
 import com.sathish.soundharajan.passwd.ui.components.GlassCard
 import com.sathish.soundharajan.passwd.ui.components.GlassScaffold
@@ -48,6 +50,7 @@ fun EditPasswordScreen(
     var serviceError by remember { mutableStateOf<String?>(null) }
     var usernameError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    val tooltipState = rememberTooltipState()
 
     // Initialize state when originalPassword is found
     LaunchedEffect(originalPassword) {
@@ -58,6 +61,11 @@ fun EditPasswordScreen(
             notes = it.notes
             tags = it.tags
         }
+    }
+
+    // Track if password has been modified
+    val isPasswordModified = remember(password, originalPassword) {
+        originalPassword != null && password != originalPassword.password
     }
 
     GlassScaffold(
@@ -96,7 +104,7 @@ fun EditPasswordScreen(
                                 service = it
                                 serviceError = null
                             },
-                            label = { Text("Service (e.g., Netflix)") },
+                            label = { Text("Service (e.g., Netflix) *") },
                             modifier = Modifier.fillMaxWidth(),
                             isError = serviceError != null
                         )
@@ -116,7 +124,7 @@ fun EditPasswordScreen(
                                 username = it
                                 usernameError = null
                             },
-                            label = { Text("Username / Email") },
+                            label = { Text("Username / Email *") },
                             modifier = Modifier.fillMaxWidth(),
                             isError = usernameError != null
                         )
@@ -130,17 +138,28 @@ fun EditPasswordScreen(
                             )
                         }
 
-                        GlassTextField(
-                            value = password,
-                            onValueChange = {
-                                password = it
-                                passwordError = null
-                            },
-                            label = { Text("Password") },
-                            modifier = Modifier.fillMaxWidth(),
-                            isPassword = true,
-                            isError = passwordError != null
-                        )
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            GlassTextField(
+                                value = password,
+                                onValueChange = {
+                                    password = it
+                                    passwordError = null
+                                },
+                                label = { Text("Password *${if (isPasswordModified) " (modified)" else ""}") },
+                                modifier = Modifier.weight(1f),
+                                isPassword = true,
+                                isError = passwordError != null
+                            )
+                            TooltipBox(
+                                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                                tooltip = { PlainTooltip { Text("Password generator") } },
+                                state = tooltipState
+                            ) {
+                                IconButton(onClick = { password = PasswordGenerator.generatePassword() }) {
+                                    Icon(Icons.Default.Refresh, "Password generator")
+                                }
+                            }
+                        }
 
                         if (passwordError != null) {
                             Text(

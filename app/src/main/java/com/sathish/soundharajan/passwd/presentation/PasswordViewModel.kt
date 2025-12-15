@@ -350,7 +350,9 @@ class PasswordViewModel @Inject constructor(
 
     fun updatePassword(entry: PasswordEntry) {
         viewModelScope.launch {
-            passwordRepository.updatePassword(entry).fold(
+            // Create updated entry with current timestamp for updatedAt, preserving createdAt
+            val updatedEntry = entry.copy(updatedAt = System.currentTimeMillis())
+            passwordRepository.updatePassword(updatedEntry).fold(
                 onSuccess = {
                     _error.value = null
                     refreshData()
