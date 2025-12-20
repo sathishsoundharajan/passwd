@@ -30,8 +30,8 @@ import com.sathish.soundharajan.passwd.security.AuthManager
 import com.sathish.soundharajan.passwd.ui.components.GlassButton
 import com.sathish.soundharajan.passwd.ui.components.GlassCard
 import com.sathish.soundharajan.passwd.ui.components.GlassScaffold
-import com.sathish.soundharajan.passwd.ui.theme.AccentCyan
 import com.sathish.soundharajan.passwd.ui.theme.ErrorRed
+import com.sathish.soundharajan.passwd.ui.theme.Primary500
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,7 +134,7 @@ fun SettingsScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AccentCyan)
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Primary500)
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Text(loadingMessage ?: "Processing...", color = MaterialTheme.colorScheme.onSurface)
                             }

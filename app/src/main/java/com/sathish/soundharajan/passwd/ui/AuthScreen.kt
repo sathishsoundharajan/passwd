@@ -29,7 +29,7 @@ import com.sathish.soundharajan.passwd.ui.components.GlassButton
 import com.sathish.soundharajan.passwd.ui.components.GlassCard
 import com.sathish.soundharajan.passwd.ui.components.GlassScaffold
 import com.sathish.soundharajan.passwd.ui.components.GlassTextField
-import com.sathish.soundharajan.passwd.ui.theme.AccentCyan
+
 import com.sathish.soundharajan.passwd.ui.theme.Primary500
 import kotlinx.coroutines.launch
 
@@ -277,7 +277,7 @@ fun LoginScreen(
                     Icon(
                         Icons.Default.Fingerprint, 
                         contentDescription = "Biometric", 
-                        tint = AccentCyan,
+                        tint = Primary500,
                         modifier = Modifier.size(32.dp)
                     )
                 }

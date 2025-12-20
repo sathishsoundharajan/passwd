@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -28,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.sathish.soundharajan.passwd.data.PasswordEntry
 import com.sathish.soundharajan.passwd.presentation.PasswordViewModel
 import com.sathish.soundharajan.passwd.ui.components.*
-import com.sathish.soundharajan.passwd.ui.theme.AccentCyan
+
 import com.sathish.soundharajan.passwd.ui.theme.ErrorRed
 import com.sathish.soundharajan.passwd.ui.theme.Primary500
 import com.sathish.soundharajan.passwd.ui.theme.PrimaryGradient
@@ -47,6 +49,9 @@ fun PasswordListScreen(
         onNavigateToEdit: (Long) -> Unit = {}
 ) {
     val passwords by viewModel.passwords.collectAsState()
+    val groupedPasswords by viewModel.groupedPasswords.collectAsState()
+    val viewMode by viewModel.viewMode.collectAsState()
+    val expandedTags by viewModel.expandedTags.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val selectedPasswords by viewModel.selectedPasswords.collectAsState()
@@ -132,7 +137,7 @@ fun PasswordListScreen(
                     Row {
                         if (selectedPasswords.isNotEmpty()) {
                             IconButton(onClick = { viewModel.bulkArchiveSelected() }) {
-                                Icon(Icons.Default.Archive, null, tint = AccentCyan)
+                                Icon(Icons.Default.Archive, null, tint = Primary500)
                             }
                             IconButton(onClick = { showBulkDeleteConfirmation = true }) {
                                 Icon(Icons.Default.Delete, null, tint = ErrorRed)
@@ -149,6 +154,13 @@ fun PasswordListScreen(
                             color = MaterialTheme.colorScheme.onSurface
                     )
                     Row {
+                        IconButton(onClick = { viewModel.toggleViewMode() }) {
+                            Icon(
+                                    if (viewMode == PasswordViewModel.ViewMode.FLAT) Icons.Default.List else Icons.Default.GridView,
+                                    "Toggle View",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         IconButton(onClick = onNavigateToSettings) {
                             Icon(
                                     Icons.Default.Settings,
@@ -258,25 +270,135 @@ fun PasswordListScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
                 ) {
-                    items(passwords, key = { it.id }) { password ->
-                        PasswordItemGlass(
-                                password = password,
-                                isSelectionMode = isSelectionMode,
-                                isSelected = selectedPasswords.contains(password.id),
-                                onClick = {
-                                    if (isSelectionMode)
+                    if (viewMode == PasswordViewModel.ViewMode.FLAT) {
+                        // Flat view - show all passwords in a single list
+                        items(passwords, key = { it.id }) { password ->
+                            PasswordItemGlass(
+                                    password = password,
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = selectedPasswords.contains(password.id),
+                                    onClick = {
+                                        if (isSelectionMode)
+                                                viewModel.togglePasswordSelection(password.id)
+                                        else onNavigateToEdit(password.id)
+                                    },
+                                    onLongClick = {
+                                        if (!isSelectionMode) {
+                                            viewModel.toggleSelectionMode()
                                             viewModel.togglePasswordSelection(password.id)
-                                    else onNavigateToEdit(password.id)
-                                },
-                                onLongClick = {
-                                    if (!isSelectionMode) {
-                                        viewModel.toggleSelectionMode()
-                                        viewModel.togglePasswordSelection(password.id)
+                                        }
+                                    },
+                                    onDelete = { showDeleteConfirmation = password },
+                                    onArchive = { viewModel.archivePassword(password) }
+                            )
+                        }
+                    } else {
+                        // Grouped view - show passwords grouped by tags with expandable sections
+                        groupedPasswords.forEach { (tag, tagPasswords) ->
+                            item(key = "tag_header_$tag") {
+                                val isExpanded = expandedTags[tag] ?: false
+                                val tagPasswordIds = tagPasswords.map { it.id }.toSet()
+                                val selectedCount = tagPasswordIds.count { selectedPasswords.contains(it) }
+                                val isFullySelected = selectedCount == tagPasswordIds.size && tagPasswordIds.isNotEmpty()
+                                val isPartiallySelected = selectedCount > 0 && selectedCount < tagPasswordIds.size
+
+                                // Expandable Tag header
+                                Surface(
+                                        modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { viewModel.toggleTagExpansion(tag) },
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f),
+                                        shape = MaterialTheme.shapes.medium
+                                ) {
+                                    Row(
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Expand/collapse icon
+                                        Icon(
+                                                if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                        )
+
+                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                        Icon(
+                                                Icons.Default.Label,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                        )
+
+                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                        Text(
+                                                text = tag,
+                                                style = MaterialTheme.typography.titleMedium.copy(
+                                                        fontWeight = FontWeight.Bold
+                                                ),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.weight(1f)
+                                        )
+
+                                        // Bulk selection checkbox (only shown in selection mode)
+                                        if (isSelectionMode) {
+                                            TriStateCheckbox(
+                                                    state = when {
+                                                        isFullySelected -> ToggleableState.On
+                                                        isPartiallySelected -> ToggleableState.Indeterminate
+                                                        else -> ToggleableState.Off
+                                                    },
+                                                    onClick = {
+                                                        viewModel.selectAllInTag(tag, !isFullySelected)
+                                                    },
+                                                    colors = CheckboxDefaults.colors(
+                                                            checkedColor = Primary500,
+                                                            checkmarkColor = Color.White,
+                                                            uncheckedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                    )
+                                            )
+                                        } else {
+                                            Text(
+                                                    text = "${tagPasswords.size}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                            )
+                                        }
                                     }
-                                },
-                                onDelete = { showDeleteConfirmation = password },
-                                onArchive = { viewModel.archivePassword(password) }
-                        )
+                                }
+                            }
+
+                            // Passwords in this tag (only show if expanded)
+                            if (expandedTags[tag] == true) {
+                                items(tagPasswords, key = { it.id }) { password ->
+                                    PasswordItemGlass(
+                                            password = password,
+                                            isSelectionMode = isSelectionMode,
+                                            isSelected = selectedPasswords.contains(password.id),
+                                            onClick = {
+                                                if (isSelectionMode)
+                                                        viewModel.togglePasswordSelection(password.id)
+                                                else onNavigateToEdit(password.id)
+                                            },
+                                            onLongClick = {
+                                                if (!isSelectionMode) {
+                                                    viewModel.toggleSelectionMode()
+                                                    viewModel.togglePasswordSelection(password.id)
+                                                }
+                                            },
+                                            onDelete = { showDeleteConfirmation = password },
+                                            onArchive = { viewModel.archivePassword(password) }
+                                    )
+                                }
+
+                                // Add spacing between groups
+                                item {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+                        }
                     }
 
                     if (isLoading) {
@@ -402,7 +524,7 @@ fun PasswordItemGlass(
                     Checkbox(
                             checked = isSelected,
                             onCheckedChange = { onClick() },
-                            colors = CheckboxDefaults.colors(checkedColor = AccentCyan)
+                            colors = CheckboxDefaults.colors(checkedColor = Primary500)
                     )
                 } else {
                     IconButton(onClick = onClick) {
@@ -448,6 +570,7 @@ fun PasswordItemGlass(
                         ActionButton(
                                 icon = Icons.Default.Archive,
                                 text = archiveActionText,
+                                color = Primary500,
                                 onClick = onArchive
                         )
                         ActionButton(

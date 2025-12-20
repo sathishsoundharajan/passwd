@@ -19,7 +19,7 @@ import com.sathish.soundharajan.passwd.ui.components.GlassCard
 import com.sathish.soundharajan.passwd.ui.components.GlassScaffold
 import com.sathish.soundharajan.passwd.ui.components.GlassTextField
 import com.sathish.soundharajan.passwd.ui.components.PasswordStrengthIndicator
-import com.sathish.soundharajan.passwd.ui.theme.AccentCyan
+
 import com.sathish.soundharajan.passwd.ui.theme.PrimaryGradient
 
 @OptIn(ExperimentalMaterial3Api::class)
