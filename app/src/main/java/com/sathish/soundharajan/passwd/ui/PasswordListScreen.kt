@@ -38,6 +38,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+
+
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordListScreen(
@@ -480,7 +484,7 @@ fun PasswordItemGlass(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                 ) {
-                    // Avatar / Icon
+                    // Avatar
                     Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
@@ -488,8 +492,7 @@ fun PasswordItemGlass(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                    text = password.service.firstOrNull()?.toString()?.uppercase()
-                                                    ?: "?",
+                                    text = password.service.firstOrNull()?.toString()?.uppercase() ?: "?",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                             )

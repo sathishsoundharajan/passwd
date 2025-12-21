@@ -58,6 +58,10 @@ fun SettingsScreen(
     var masterPasswordProgress by remember { mutableStateOf(0f) }
     var masterPasswordProgressText by remember { mutableStateOf("") }
 
+    // Import confirmation state
+    var showImportConfirmation by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+
     // Monitor for completion of master password change
     LaunchedEffect(error) {
         if (showMasterPasswordProgress && error != null) {
@@ -89,7 +93,8 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.importPasswords(context, it, "TEMP_MASTER")
+            pendingImportUri = it
+            showImportConfirmation = true
         }
     }
 
@@ -316,6 +321,23 @@ fun SettingsScreen(
         )
     }
 
+    // Import Confirmation Dialog
+    if (showImportConfirmation) {
+        ImportConfirmationDialog(
+            onConfirm = {
+                showImportConfirmation = false
+                pendingImportUri?.let { uri ->
+                    viewModel.importPasswords(context, uri, "TEMP_MASTER")
+                    pendingImportUri = null
+                }
+            },
+            onCancel = {
+                showImportConfirmation = false
+                pendingImportUri = null
+            }
+        )
+    }
+
     // Master Password Change Progress Dialog
     if (showMasterPasswordProgress) {
         AlertDialog(
@@ -438,6 +460,32 @@ fun BiometricSettingsDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun ImportConfirmationDialog(
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Confirm Import") },
+        text = {
+            Text(
+                "This will import passwords from the file and may overwrite any existing entries that match. This action cannot be undone. Continue?"
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
                 Text("Cancel")
             }
         }
