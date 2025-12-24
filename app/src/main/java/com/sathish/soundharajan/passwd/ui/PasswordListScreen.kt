@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -149,13 +150,11 @@ fun PasswordListScreen(
                         }
                     }
                 } else {
-                    Text(
-                            "My Vault",
-                            style =
-                                    MaterialTheme.typography.headlineMedium.copy(
-                                            fontWeight = FontWeight.Bold
-                                    ),
-                            color = MaterialTheme.colorScheme.onSurface
+                    AegisLogo(
+                            size = 36.dp,
+                            textStyle = MaterialTheme.typography.headlineMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                            )
                     )
                     Row {
                         IconButton(onClick = { viewModel.toggleViewMode() }) {
@@ -270,7 +269,7 @@ fun PasswordListScreen(
             } else {
                 LazyColumn(
                         state = listState,
-                        contentPadding = PaddingValues(bottom = 80.dp),
+                        contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
                 ) {

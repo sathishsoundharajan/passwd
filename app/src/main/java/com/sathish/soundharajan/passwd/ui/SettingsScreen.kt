@@ -51,6 +51,7 @@ fun SettingsScreen(
     val isBiometricAvailable = remember { authManager.isBiometricAvailable() }
     var isBiometricEnabled by remember { mutableStateOf(authManager.isBiometricEnabled()) }
     var showBiometricDialog by remember { mutableStateOf(false) }
+    var biometricError by remember { mutableStateOf<String?>(null) }
 
     // Master password change state
     var showMasterPasswordDialog by remember { mutableStateOf(false) }
@@ -65,8 +66,29 @@ fun SettingsScreen(
     // Monitor for completion of master password change
     LaunchedEffect(error) {
         if (showMasterPasswordProgress && error != null) {
-            if (error?.contains("Master password changed successfully") == true ||
-                error?.contains("Failed to change master password") == true) {
+            if (error?.contains("Master password changed successfully") == true) {
+                showMasterPasswordProgress = false
+                masterPasswordProgress = 0f
+                masterPasswordProgressText = ""
+
+                // Update biometric state if it was enabled before the change
+                // This happens after successful password change to avoid interfering with the process
+                if (isBiometricEnabled) {
+                    try {
+                        // We need to prompt for the new password since we don't store it
+                        // For now, we'll show a dialog to re-enable biometrics
+                        showBiometricDialog = true
+                    } catch (e: Exception) {
+                        // If biometric update fails, disable biometrics silently
+                        try {
+                            authManager.setBiometricEnabled(false)
+                        } catch (biometricException: Exception) {
+                            // Ignore biometric disable errors
+                        }
+                        isBiometricEnabled = false
+                    }
+                }
+            } else if (error?.contains("Failed to change master password") == true) {
                 showMasterPasswordProgress = false
                 masterPasswordProgress = 0f
                 masterPasswordProgressText = ""
@@ -189,14 +211,14 @@ fun SettingsScreen(
                     Column {
                         SettingsItem(
                             icon = Icons.Default.Upload,
-                            title = "Export to JSON",
+                            title = "Export",
                             subtitle = "Backup your passwords to a file",
                             onClick = { exportLauncher.launch("passwd_backup_${System.currentTimeMillis()}.json") }
                         )
                         Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                         SettingsItem(
                             icon = Icons.Default.Archive,
-                            title = "Import from JSON",
+                            title = "Import",
                             subtitle = "Restore passwords from a backup file",
                             onClick = { importLauncher.launch(arrayOf("application/json")) }
                         )
@@ -268,26 +290,28 @@ fun SettingsScreen(
     if (showBiometricDialog) {
         BiometricSettingsDialog(
             isCurrentlyEnabled = isBiometricEnabled,
-            onEnable = {
-                // For enabling biometrics, we would need to prompt for master password
-                // For now, we'll use a simplified approach
+            biometricError = biometricError,
+            onEnable = { password ->
+                biometricError = null // Clear previous errors
                 try {
-                    // In a real app, we'd prompt for the master password here
-                    // For demo purposes, we'll assume we have it or use a placeholder
-                    authManager.setBiometricEnabled(true, "TEMP_MASTER") // This should be the actual master password
+                    authManager.setBiometricEnabled(true, password)
                     isBiometricEnabled = true
                     showBiometricDialog = false
                 } catch (e: Exception) {
-                    // Handle error - in real app show error message
-                    showBiometricDialog = false
+                    biometricError = "Failed to enable biometrics: ${e.localizedMessage ?: "Unknown error"}"
+                    // Don't close dialog so user can see error and retry
                 }
             },
             onDisable = {
                 authManager.setBiometricEnabled(false)
                 isBiometricEnabled = false
                 showBiometricDialog = false
+                biometricError = null
             },
-            onDismiss = { showBiometricDialog = false }
+            onDismiss = {
+                showBiometricDialog = false
+                biometricError = null
+            }
         )
     }
 
@@ -298,21 +322,13 @@ fun SettingsScreen(
                 showMasterPasswordDialog = false
                 showMasterPasswordProgress = true
 
+                // Store biometric state for updating after successful password change
+                val biometricWasEnabled = isBiometricEnabled
+
                 // Use PasswordViewModel to handle the master password change with progress
                 viewModel.changeMasterPassword(currentPassword, newPassword) { current, total, step ->
                     masterPasswordProgress = if (total > 0) current.toFloat() / total.toFloat() else 0f
                     masterPasswordProgressText = step
-                }
-
-                // Update biometric state if needed
-                if (isBiometricEnabled) {
-                    try {
-                        authManager.setBiometricEnabled(true, newPassword)
-                    } catch (e: Exception) {
-                        // If biometric update fails, disable biometrics
-                        authManager.setBiometricEnabled(false)
-                        isBiometricEnabled = false
-                    }
                 }
 
                 true
@@ -401,7 +417,8 @@ fun SettingsItem(
 @Composable
 fun BiometricSettingsDialog(
     isCurrentlyEnabled: Boolean,
-    onEnable: () -> Unit,
+    biometricError: String? = null,
+    onEnable: (password: String) -> Unit,
     onDisable: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -433,8 +450,18 @@ fun BiometricSettingsDialog(
                         onValueChange = { masterPassword = it },
                         label = { Text("Master Password") },
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = biometricError != null
                     )
+
+                    if (biometricError != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = biometricError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         },
@@ -446,7 +473,7 @@ fun BiometricSettingsDialog(
             } else {
                 if (showPasswordField) {
                     Button(
-                        onClick = onEnable,
+                        onClick = { onEnable(masterPassword) },
                         enabled = masterPassword.isNotBlank()
                     ) {
                         Text("Enable")

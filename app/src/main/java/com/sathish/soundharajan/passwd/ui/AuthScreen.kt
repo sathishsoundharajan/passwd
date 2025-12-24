@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import com.sathish.soundharajan.passwd.presentation.AuthState
 import com.sathish.soundharajan.passwd.presentation.AuthViewModel
+import com.sathish.soundharajan.passwd.ui.components.AegisLogo
 import com.sathish.soundharajan.passwd.ui.components.GlassButton
 import com.sathish.soundharajan.passwd.ui.components.GlassCard
 import com.sathish.soundharajan.passwd.ui.components.GlassScaffold
@@ -288,47 +289,10 @@ fun LoginScreen(
 
 @Composable
 fun LogoSection() {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000),
-            repeatMode = RepeatMode.Reverse
-        ), label = "scale"
-    )
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.size(100.dp)
-    ) {
-        // Glow effect
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .scale(scale)
-                .alpha(0.3f)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Primary500, Color.Transparent)
-                    )
-                )
+    AegisLogo(
+        size = 48.dp,
+        textStyle = MaterialTheme.typography.headlineLarge.copy(
+            fontWeight = FontWeight.Bold
         )
-        // Icon
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.size(64.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-    }
+    )
 }

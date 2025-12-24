@@ -3,19 +3,8 @@
     android:height="120dp"
     android:viewportWidth="120"
     android:viewportHeight="120">
+  <!-- Official Material Design lock icon path for splash screen -->
   <path
-      android:pathData="M60,60m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0"
-      android:fillColor="#0052CC"/>
-  <path
-      android:pathData="M60,60m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"
-      android:fillColor="#FFFFFF"/>
-  <path
-      android:pathData="M48,48h24v20h-8v-12h-8v12h-8z"
-      android:fillColor="#0052CC"/>
-  <path
-      android:pathData="M44,44h4v4h-4z"
-      android:fillColor="#0052CC"/>
-  <path
-      android:pathData="M72,44h4v4h-4z"
-      android:fillColor="#0052CC"/>
+      android:fillColor="#2D68FF"
+      android:pathData="M50,27h-3v-7c0-6.2-5-11.2-11.2-11.2S24.6,12.8,24.6,19v7h-3c-2.4,0-4.4,2-4.4,4.4v22.2c0,2.4,2,4.4,4.4,4.4h28.8c2.4,0,4.4-2,4.4-4.4V31.4c0-2.4-2-4.4-4.4-4.4zM40,20c0-3.8,3.1-6.9,6.9-6.9S53.8,16.2,53.8,20v7H40v-7zm7,25c-2.4,0-4.4-2-4.4-4.4s2-4.4,4.4-4.4,4.4,2,4.4,4.4-2,4.4-4.4,4.4z"/>
 </vector>

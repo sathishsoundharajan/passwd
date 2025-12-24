@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sathish.soundharajan.passwd.data.PasswordEntry
 import com.sathish.soundharajan.passwd.data.PasswordRepository
 import com.sathish.soundharajan.passwd.data.ExportImportManager
+import com.sathish.soundharajan.passwd.security.AuthManager
 import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PasswordViewModel @Inject constructor(
     private val passwordRepository: PasswordRepository,
-    private val exportImportManager: ExportImportManager
+    private val exportImportManager: ExportImportManager,
+    private val authManager: AuthManager
 ) : ViewModel() {
 
     enum class ViewMode {
@@ -676,6 +678,8 @@ class PasswordViewModel @Inject constructor(
                 onProgress?.invoke(current, total, step)
             }.fold(
                 onSuccess = {
+                    // Update AuthManager with the new password hash
+                    authManager.setMasterPassword(newPassword)
                     _error.value = "Master password changed successfully"
                     refreshData()
                 },
