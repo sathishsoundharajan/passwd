@@ -1,20 +1,20 @@
 <resources>
-    <string name="app_name">Passwd</string>
-    <string name="app_full_name">Passwd - Secure Password Manager</string>
-    <string name="app_description">Keep your passwords safe with military-grade encryption</string>
-    <string name="app_tagline">Your passwords, securely stored</string>
+    <string name="app_name">Aegis</string>
+    <string name="app_full_name">Aegis - Secure Password Vault</string>
+    <string name="app_description">Fortify your digital world with impenetrable security</string>
+    <string name="app_tagline">Your digital fortress, secured</string>
 
     <!-- Authentication -->
     <string name="welcome_back">Welcome Back</string>
     <string name="enter_master_password">Enter your master password</string>
     <string name="set_master_password">Set your master password</string>
     <string name="confirm_master_password">Confirm your master password</string>
-    <string name="biometric_prompt_title">Unlock Passwd</string>
+    <string name="biometric_prompt_title">Unlock Aegis</string>
     <string name="biometric_prompt_subtitle">Use your fingerprint to unlock</string>
     <string name="biometric_prompt_description">Place your finger on the sensor</string>
 
     <!-- Password Management -->
-    <string name="password_manager">Passwd</string>
+    <string name="password_manager">Aegis</string>
     <string name="add_password">Add Password</string>
     <string name="edit_password">Edit Password</string>
     <string name="delete_password">Delete Password</string>

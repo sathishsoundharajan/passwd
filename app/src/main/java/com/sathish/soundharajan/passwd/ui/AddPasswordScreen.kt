@@ -32,6 +32,7 @@ fun AddPasswordScreen(
     var notes by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
+    val tooltipState = rememberTooltipState()
     
     // Clear error when screen is first displayed
     LaunchedEffect(Unit) {
@@ -105,7 +106,7 @@ fun AddPasswordScreen(
                         GlassTextField(
                             value = service,
                             onValueChange = { service = it },
-                            label = { Text("Service Name") },
+                            label = { Text("Service Name *") },
                             leadingIcon = { Icon(Icons.Default.Language, null) },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -113,7 +114,7 @@ fun AddPasswordScreen(
                         GlassTextField(
                             value = username,
                             onValueChange = { username = it },
-                            label = { Text("Username / Email") },
+                            label = { Text("Username / Email *") },
                             leadingIcon = { Icon(Icons.Default.Person, null) },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -122,12 +123,18 @@ fun AddPasswordScreen(
                             GlassTextField(
                                 value = password,
                                 onValueChange = { password = it },
-                                label = { Text("Password") },
+                                label = { Text("Password *") },
                                 leadingIcon = { Icon(Icons.Default.VpnKey, null) },
                                 modifier = Modifier.weight(1f)
                             )
-                            IconButton(onClick = { password = PasswordGenerator.generatePassword() }) {
-                                Icon(Icons.Default.Refresh, "Generate")
+                            TooltipBox(
+                                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                                tooltip = { PlainTooltip { Text("Password generator") } },
+                                state = tooltipState
+                            ) {
+                                IconButton(onClick = { password = PasswordGenerator.generatePassword() }) {
+                                    Icon(Icons.Default.Refresh, "Password generator")
+                                }
                             }
                         }
                         

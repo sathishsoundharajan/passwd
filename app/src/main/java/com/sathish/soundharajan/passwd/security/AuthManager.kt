@@ -11,6 +11,9 @@ import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.security.KeyStore
+import java.security.KeyStoreException
+import java.security.NoSuchAlgorithmException
+import java.security.InvalidAlgorithmParameterException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -73,8 +76,7 @@ class AuthManager @Inject constructor(
     fun isBiometricAvailable(): Boolean {
         val biometricManager = BiometricManager.from(context)
         val result = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        return result == BiometricManager.BIOMETRIC_SUCCESS ||
-               result == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED // Available but not enrolled
+        return result == BiometricManager.BIOMETRIC_SUCCESS // Only available if enrolled
     }
 
     fun isBiometricEnabled(): Boolean {
@@ -91,9 +93,19 @@ class AuthManager @Inject constructor(
     }
 
     private fun storeBiometricPassword(password: String) {
+        var keyCreated = false
         try {
             val keyStore = KeyStore.getInstance("AndroidKeyStore")
             keyStore.load(null)
+
+            // Clean up any existing biometric key first
+            try {
+                if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) {
+                    keyStore.deleteEntry(BIOMETRIC_KEY_ALIAS)
+                }
+            } catch (cleanupException: Exception) {
+                // Ignore cleanup errors, continue with setup
+            }
 
             val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
             val keyGenParameterSpec = KeyGenParameterSpec.Builder(
@@ -109,9 +121,15 @@ class AuthManager @Inject constructor(
 
             keyGenerator.init(keyGenParameterSpec)
             keyGenerator.generateKey()
+            keyCreated = true
 
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, keyStore.getKey(BIOMETRIC_KEY_ALIAS, null))
+            val key = keyStore.getKey(BIOMETRIC_KEY_ALIAS, null)
+            if (key == null) {
+                throw RuntimeException("Biometric key was not created successfully")
+            }
+
+            cipher.init(Cipher.ENCRYPT_MODE, key)
 
             val encryptedPassword = cipher.doFinal(password.toByteArray(Charsets.UTF_8))
             val iv = cipher.iv
@@ -120,9 +138,25 @@ class AuthManager @Inject constructor(
                 .putString(BIOMETRIC_PASSWORD_KEY, Base64.encodeToString(encryptedPassword, Base64.DEFAULT))
                 .putString(BIOMETRIC_IV_KEY, Base64.encodeToString(iv, Base64.DEFAULT))
                 .apply()
-        } catch (e: Exception) {
+        } catch (e: KeyStoreException) {
+            clearBiometricPassword()
             prefs.edit().putBoolean(BIOMETRIC_ENABLED_KEY, false).apply()
-            throw RuntimeException("Failed to store biometric password", e)
+            throw RuntimeException("Android Keystore not available: ${e.localizedMessage}", e)
+        } catch (e: NoSuchAlgorithmException) {
+            clearBiometricPassword()
+            prefs.edit().putBoolean(BIOMETRIC_ENABLED_KEY, false).apply()
+            throw RuntimeException("AES encryption not supported on this device: ${e.localizedMessage}", e)
+        } catch (e: InvalidAlgorithmParameterException) {
+            clearBiometricPassword()
+            prefs.edit().putBoolean(BIOMETRIC_ENABLED_KEY, false).apply()
+            throw RuntimeException("Biometric authentication parameters not supported: ${e.localizedMessage}", e)
+        } catch (e: Exception) {
+            // Clean up any partially created key
+            if (keyCreated) {
+                clearBiometricPassword()
+            }
+            prefs.edit().putBoolean(BIOMETRIC_ENABLED_KEY, false).apply()
+            throw RuntimeException("Failed to set up biometric authentication: ${e.localizedMessage ?: "Unknown error"}", e)
         }
     }
 
@@ -194,9 +228,9 @@ class AuthManager @Inject constructor(
     }
 
     private fun hashPassword(password: CharArray, salt: ByteArray): String {
-        // Use PBKDF2 for password hashing for verification (separate from DB key derivation which uses 600k rounds)
-        // We can keep 10k here for quick login checks or upgrade it. Let's upgrade to 100k for balance.
-        val iterations = 100_000 
+        // Use PBKDF2 for password hashing for verification (separate from DB key derivation which uses 200k rounds)
+        // Reduced from 100k to 50k for better login performance while maintaining security
+        val iterations = 50_000
         val spec = PBEKeySpec(password, salt, iterations, 256)
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         val hashBytes = factory.generateSecret(spec).encoded

@@ -40,13 +40,41 @@ class VaultManager @Inject constructor(
             throw IllegalArgumentException("Current password is incorrect")
         }
 
-        // Update the master password in AuthManager
+        // Update the master password in AuthManager first
         authManager.setMasterPassword(newPassword)
 
         // Close current database
         closeVault()
 
         // Reopen with new password
+        openVault(newPassword)
+    }
+
+    /**
+     * Safely change master password by recreating the database
+     * This method should be called while the database is still open with the old password
+     */
+    fun recreateDatabaseWithNewPassword(newPassword: String) {
+        // Close current database
+        closeVault()
+
+        // Delete the old database file to prevent key mismatch
+        try {
+            val dbFile = context.getDatabasePath("passwords.db")
+            if (dbFile.exists()) {
+                val deleted = dbFile.delete()
+                if (!deleted) {
+                    throw IllegalStateException("Failed to delete old database file")
+                }
+            }
+        } catch (e: Exception) {
+            throw IllegalStateException("Failed to clean up old database: ${e.message}")
+        }
+
+        // Clear the singleton instance to force recreation
+        AppDatabase.clearInstance()
+
+        // Open new database with new password
         openVault(newPassword)
     }
 }

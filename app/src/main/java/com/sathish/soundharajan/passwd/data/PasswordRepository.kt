@@ -171,17 +171,18 @@ class PasswordRepository @Inject constructor(
         onProgress: ((current: Int, total: Int, step: String) -> Unit)? = null
     ): Result<Unit> {
         return errorRecovery.executeWithRecovery("change_master_password") {
-            // Get all passwords that need to be re-encrypted (stored encrypted in DB)
+            // Get all passwords that need to be migrated (stored encrypted in DB)
+            // Include ALL entries (active, archived, deleted) to preserve complete data
             val allPasswords = passwordDao?.getAllPasswordsForReEncryption() ?: emptyList()
             val totalPasswords = allPasswords.size
 
-            onProgress?.invoke(0, totalPasswords, "Preparing to re-encrypt passwords...")
+            onProgress?.invoke(0, totalPasswords, "Preparing to migrate passwords...")
 
             // Process passwords in batches to avoid blocking UI for too long
             val batchSize = 10
             val decryptedPasswords = mutableListOf<PasswordEntry>()
 
-            // Phase 1: Decrypt all passwords in batches
+            // Phase 1: Decrypt all passwords in batches (keep them in memory)
             for (i in allPasswords.indices step batchSize) {
                 val batch = allPasswords.subList(i, minOf(i + batchSize, allPasswords.size))
                 val decryptedBatch = batch.map { password ->
@@ -197,26 +198,34 @@ class PasswordRepository @Inject constructor(
                 )
             }
 
-            // Phase 2: Change the master password (this updates the CryptoManager key)
+            // Phase 2: Safely recreate database with new password
+            // This deletes the old encrypted file and creates a new one
             onProgress?.invoke(totalPasswords, totalPasswords, "Updating master password...")
-            vaultManager.changeMasterPassword(oldPassword, newPassword)
+            vaultManager.recreateDatabaseWithNewPassword(newPassword)
 
-            // Phase 3: Re-encrypt all passwords with the new key in batches
+            // Phase 3: Import all passwords into the new database
+            // They will be automatically encrypted with the new key
+            val newDao = vaultManager.getDatabase()?.passwordDao()
+                ?: throw IllegalStateException("Failed to access new database")
+
             for (i in decryptedPasswords.indices step batchSize) {
                 val batch = decryptedPasswords.subList(i, minOf(i + batchSize, decryptedPasswords.size))
-                val reEncryptedBatch = batch.map { password ->
-                    password.copy(password = encryptPassword(password.password))
-                }
 
-                // Update each password in the batch
-                for (password in reEncryptedBatch) {
-                    passwordDao?.updatePassword(password)
+                // Insert each password into the new database (will be auto-encrypted)
+                for (password in batch) {
+                    try {
+                        newDao.insertPassword(password)
+                    } catch (e: Exception) {
+                        // Log the error but continue with other passwords
+                        // This prevents one corrupted password from stopping the entire process
+                        android.util.Log.e("PasswordRepository", "Failed to migrate password ${password.id}: ${e.message}")
+                    }
                 }
 
                 onProgress?.invoke(
                     totalPasswords + minOf(i + batchSize, decryptedPasswords.size),
                     totalPasswords * 2,
-                    "Re-encrypting passwords... (${minOf(i + batchSize, decryptedPasswords.size)}/$totalPasswords)"
+                    "Migrating passwords... (${minOf(i + batchSize, decryptedPasswords.size)}/$totalPasswords)"
                 )
             }
 

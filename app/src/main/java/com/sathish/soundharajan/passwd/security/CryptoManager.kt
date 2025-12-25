@@ -110,8 +110,8 @@ class AndroidCryptoManager @Inject constructor(
 
     override fun deriveDatabaseKey(masterPassword: CharArray, salt: ByteArray?): ByteArray {
         val actualSalt = salt ?: getOrGenerateSalt()
-        val iterations = 600_000 // High iteration count for security
-        
+        val iterations = 200_000 // Balanced iteration count for performance and security
+
         val pbkdf2 = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
         val spec = PBEKeySpec(masterPassword, actualSalt, iterations, 256)
         val key = pbkdf2.generateSecret(spec)

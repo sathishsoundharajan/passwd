@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sathish.soundharajan.passwd.data.PasswordEntry
 import com.sathish.soundharajan.passwd.data.PasswordRepository
 import com.sathish.soundharajan.passwd.data.ExportImportManager
+import com.sathish.soundharajan.passwd.security.AuthManager
 import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,8 +23,13 @@ import javax.inject.Inject
 @HiltViewModel
 class PasswordViewModel @Inject constructor(
     private val passwordRepository: PasswordRepository,
-    private val exportImportManager: ExportImportManager
+    private val exportImportManager: ExportImportManager,
+    private val authManager: AuthManager
 ) : ViewModel() {
+
+    enum class ViewMode {
+        FLAT, GROUPED
+    }
 
     companion object {
         private const val PAGE_SIZE = 50
@@ -46,6 +52,15 @@ class PasswordViewModel @Inject constructor(
 
     private val _selectedPasswords = MutableStateFlow<Set<Long>>(emptySet())
     val selectedPasswords: StateFlow<Set<Long>> = _selectedPasswords.asStateFlow()
+
+    private val _viewMode = MutableStateFlow<ViewMode>(ViewMode.FLAT)
+    val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+
+    private val _groupedPasswords = MutableStateFlow<Map<String, List<PasswordEntry>>>(emptyMap())
+    val groupedPasswords: StateFlow<Map<String, List<PasswordEntry>>> = _groupedPasswords.asStateFlow()
+
+    private val _expandedTags = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val expandedTags: StateFlow<Map<String, Boolean>> = _expandedTags.asStateFlow()
 
 
     // Error handling - using SharedFlow for one-time events (not persistent state)
@@ -156,6 +171,10 @@ class PasswordViewModel @Inject constructor(
                         _passwords.value = _passwords.value + newPasswords
                     }
                     _hasMorePasswords.value = newPasswords.size == PAGE_SIZE
+                    // Update grouped passwords if in grouped mode
+                    if (_viewMode.value == ViewMode.GROUPED) {
+                        updateGroupedPasswords()
+                    }
                 } else {
                     _hasMorePasswords.value = false
                 }
@@ -233,7 +252,7 @@ class PasswordViewModel @Inject constructor(
                 // Ignore count errors or handle
             }
         }
-        
+
         viewModelScope.launch {
             try {
                 val offset = currentSearchPage * PAGE_SIZE
@@ -241,6 +260,10 @@ class PasswordViewModel @Inject constructor(
                 if (searchResults != null) {
                     _passwords.value = searchResults
                     _hasMoreSearchResults.value = searchResults.size == PAGE_SIZE
+                    // Update grouped passwords if in grouped mode
+                    if (_viewMode.value == ViewMode.GROUPED) {
+                        updateGroupedPasswords()
+                    }
                 } else {
                     _passwords.value = emptyList()
                     _hasMoreSearchResults.value = false
@@ -278,6 +301,10 @@ class PasswordViewModel @Inject constructor(
                 if (newResults != null) {
                     _passwords.value = _passwords.value + newResults
                     _hasMoreSearchResults.value = newResults.size == PAGE_SIZE
+                    // Update grouped passwords if in grouped mode
+                    if (_viewMode.value == ViewMode.GROUPED) {
+                        updateGroupedPasswords()
+                    }
                 } else {
                     _hasMoreSearchResults.value = false
                 }
@@ -350,7 +377,9 @@ class PasswordViewModel @Inject constructor(
 
     fun updatePassword(entry: PasswordEntry) {
         viewModelScope.launch {
-            passwordRepository.updatePassword(entry).fold(
+            // Create updated entry with current timestamp for updatedAt, preserving createdAt
+            val updatedEntry = entry.copy(updatedAt = System.currentTimeMillis())
+            passwordRepository.updatePassword(updatedEntry).fold(
                 onSuccess = {
                     _error.value = null
                     refreshData()
@@ -458,6 +487,77 @@ class PasswordViewModel @Inject constructor(
 
     fun clearError() {
         _error.value = null
+    }
+
+    fun toggleViewMode() {
+        _viewMode.value = when (_viewMode.value) {
+            ViewMode.FLAT -> ViewMode.GROUPED
+            ViewMode.GROUPED -> ViewMode.FLAT
+        }
+        // Update grouped passwords when switching to grouped mode
+        if (_viewMode.value == ViewMode.GROUPED) {
+            updateGroupedPasswords()
+        }
+    }
+
+    private fun updateGroupedPasswords() {
+        val passwords = _passwords.value
+        val grouped = mutableMapOf<String, MutableList<PasswordEntry>>()
+
+        for (password in passwords) {
+            val tags = parseTags(password.tags)
+            if (tags.isEmpty()) {
+                grouped.getOrPut("Untagged") { mutableListOf() }.add(password)
+            } else {
+                for (tag in tags) {
+                    grouped.getOrPut(tag) { mutableListOf() }.add(password)
+                }
+            }
+        }
+
+        // Sort groups alphabetically, but keep "Untagged" at the end
+        val sortedGrouped = grouped.toSortedMap(compareBy { if (it == "Untagged") "zzz" else it.lowercase() })
+
+        _groupedPasswords.value = sortedGrouped
+    }
+
+    private fun parseTags(tagsString: String): List<String> {
+        return tagsString.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+    }
+
+    fun toggleTagExpansion(tag: String) {
+        val currentExpanded = _expandedTags.value.toMutableMap()
+        currentExpanded[tag] = !(currentExpanded[tag] ?: false)
+        _expandedTags.value = currentExpanded
+    }
+
+    fun selectAllInTag(tag: String, select: Boolean) {
+        val tagPasswords = _groupedPasswords.value[tag] ?: return
+        val tagPasswordIds = tagPasswords.map { it.id }.toSet()
+
+        val currentSelection = _selectedPasswords.value
+        if (select) {
+            _selectedPasswords.value = currentSelection + tagPasswordIds
+        } else {
+            _selectedPasswords.value = currentSelection - tagPasswordIds
+        }
+    }
+
+    fun isTagFullySelected(tag: String): Boolean {
+        val tagPasswords = _groupedPasswords.value[tag] ?: return false
+        if (tagPasswords.isEmpty()) return false
+        val tagPasswordIds = tagPasswords.map { it.id }.toSet()
+        return tagPasswordIds.all { _selectedPasswords.value.contains(it) }
+    }
+
+    fun isTagPartiallySelected(tag: String): Boolean {
+        val tagPasswords = _groupedPasswords.value[tag] ?: return false
+        if (tagPasswords.isEmpty()) return false
+        val tagPasswordIds = tagPasswords.map { it.id }.toSet()
+        val selectedCount = tagPasswordIds.count { _selectedPasswords.value.contains(it) }
+        return selectedCount > 0 && selectedCount < tagPasswordIds.size
     }
 
     fun exportPasswords(context: Context, format: String = "json", masterPassword: String, destinationUri: Uri) {
@@ -578,6 +678,8 @@ class PasswordViewModel @Inject constructor(
                 onProgress?.invoke(current, total, step)
             }.fold(
                 onSuccess = {
+                    // Update AuthManager with the new password hash
+                    authManager.setMasterPassword(newPassword)
                     _error.value = "Master password changed successfully"
                     refreshData()
                 },
